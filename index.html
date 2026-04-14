@@ -1,263 +1,449 @@
-import { useState, useRef } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swing Coach ⚾</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Nunito',sans-serif;background:#1a2a4a;color:#f8f4ee;min-height:100vh}
+.wrap{max-width:680px;margin:0 auto;padding:20px 14px 60px}
+.logo{font-family:'Fredoka One',cursive;font-size:2.4rem;color:#f5c842;text-shadow:0 3px 0 #b8911e;text-align:center}
+.logo span{color:#f8f4ee;text-shadow:0 3px 0 #555}
+.tagline{text-align:center;font-size:.88rem;font-weight:600;color:rgba(255,255,255,.45);margin:4px 0 24px}
+.card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:20px;margin-bottom:16px}
+.card-title{font-family:'Fredoka One',cursive;font-size:1.05rem;color:#f5c842;margin-bottom:12px}
+.name-input{width:100%;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.15);border-radius:12px;padding:11px 14px;color:#f8f4ee;font-family:'Nunito',sans-serif;font-size:1rem;font-weight:600;outline:none}
+.name-input:focus{border-color:#f5c842}
 
-const FOCUS_OPTIONS = [
-  { value: "Stance and Setup", emoji: "🦵", label: "Stance & Setup", on: true },
-  { value: "Grip and Hands",   emoji: "✊", label: "Grip & Hands",   on: true },
-  { value: "Swing Path",       emoji: "🌀", label: "Swing Path",     on: true },
-  { value: "Follow Through",   emoji: "🌪️", label: "Follow Through", on: true },
-  { value: "Hip Rotation",     emoji: "🕺", label: "Hip Rotation",   on: false },
-  { value: "Eye on Ball",      emoji: "👁️", label: "Eye on Ball",    on: false },
-];
+/* file buttons */
+.file-wrap{position:relative;margin-bottom:10px}
+.file-wrap input[type=file]{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;font-size:0}
+.file-btn{width:100%;padding:15px;border-radius:13px;border:none;font-family:'Fredoka One',cursive;font-size:1.05rem;display:flex;align-items:center;justify-content:center;gap:8px;pointer-events:none}
+.file-btn.vid{background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;box-shadow:0 4px 0 #1e3a8a}
+.file-btn.lib{background:rgba(255,255,255,.07);color:rgba(255,255,255,.75);border:1.5px solid rgba(255,255,255,.15)}
+.hint{text-align:center;font-size:.76rem;font-weight:600;color:rgba(255,255,255,.32);margin-top:8px}
 
-function resizeImage(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const maxW = 1024;
-        const scale = Math.min(1, maxW / img.width);
-        const c = document.createElement("canvas");
-        c.width  = Math.round(img.width  * scale);
-        c.height = Math.round(img.height * scale);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL("image/jpeg", 0.85));
-      } catch {
-        resolve(dataUrl);
-      }
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
+/* video preview */
+#videoEl{width:100%;border-radius:12px;max-height:300px;background:#000;display:none;margin-bottom:10px}
+.retake-btn{width:100%;padding:10px;border-radius:11px;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#f8f4ee;font-family:'Fredoka One',cursive;font-size:.9rem;cursor:pointer;margin-bottom:0}
+
+/* processing */
+#processingBox{display:none;background:rgba(245,200,66,.1);border:1.5px solid rgba(245,200,66,.35);border-radius:14px;padding:16px;text-align:center;margin-top:10px}
+.proc-title{font-family:'Fredoka One',cursive;font-size:1rem;color:#f5c842;margin-bottom:6px}
+.prog-bar-wrap{background:rgba(255,255,255,.1);border-radius:50px;height:10px;overflow:hidden;margin:8px 0}
+.prog-bar{height:100%;background:linear-gradient(90deg,#f5c842,#e8955a);border-radius:50px;transition:width .2s;width:0%}
+.proc-sub{font-size:.78rem;color:rgba(255,255,255,.5);font-weight:600}
+
+/* filmstrip */
+#filmstrip{display:none;margin-top:12px}
+.filmstrip-label{font-size:.8rem;font-weight:700;color:rgba(255,255,255,.5);margin-bottom:8px;text-align:center}
+.frames-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.frame-thumb{width:80px;height:55px;border-radius:8px;object-fit:cover;flex-shrink:0;border:2px solid rgba(255,255,255,.15)}
+
+/* focus grid */
+.focus-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.focus-item{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.1);border-radius:11px;padding:9px 12px;cursor:pointer;user-select:none;transition:all .2s}
+.focus-item.on{background:rgba(245,200,66,.12);border-color:#f5c842}
+.focus-item input{display:none}
+.fi-label{font-size:.85rem;font-weight:700}
+
+/* analyze btn */
+.btn-analyze{width:100%;padding:15px;border-radius:15px;border:none;background:linear-gradient(135deg,#c8763a,#e8955a);color:#fff;font-family:'Fredoka One',cursive;font-size:1.3rem;cursor:pointer;box-shadow:0 4px 0 #8a4d1e;transition:all .2s;margin-top:4px}
+.btn-analyze:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+.btn-analyze:hover:not(:disabled){transform:translateY(-2px)}
+
+/* error */
+.err{background:rgba(232,64,64,.15);border:1px solid rgba(232,64,64,.3);border-radius:11px;padding:13px 15px;font-size:.86rem;color:#fca5a5;margin-top:12px;word-break:break-word;display:none}
+
+/* loading */
+#loadingBox{display:none;text-align:center;padding:60px 20px}
+.spin{font-size:3.5rem;display:inline-block;animation:spin 1.2s linear infinite}
+.load-title{font-family:'Fredoka One',cursive;font-size:1.25rem;color:#f5c842;margin-top:14px}
+.load-sub{font-size:.82rem;color:rgba(255,255,255,.4);margin-top:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* results */
+#resultsBox{display:none}
+.hype-badge{display:inline-flex;align-items:center;background:linear-gradient(135deg,#7c3aed,#4f46e5);border-radius:50px;padding:5px 13px;font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.r-name{font-family:'Fredoka One',cursive;font-size:1.85rem;color:#f5c842;text-shadow:0 2px 0 #b8911e}
+.r-sub{font-size:.82rem;color:rgba(255,255,255,.42);font-weight:600;margin-bottom:20px}
+.score-wrap{display:flex;justify-content:center;margin:4px 0 22px}
+.score-ring{width:120px;height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.score-ring::before{content:'';position:absolute;inset:12px;border-radius:50%;background:#1e3a6a}
+.score-inner{position:relative;z-index:1;text-align:center}
+.score-num{font-family:'Fredoka One',cursive;font-size:2.2rem;line-height:1}
+.score-lbl{font-size:.65rem;font-weight:700;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.5px}
+.fb{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:13px;padding:15px;margin-bottom:11px}
+.fb.great{border-left:4px solid #4ade80}.fb.work{border-left:4px solid #f5c842}.fb.tip{border-left:4px solid #60a5fa}
+.fb-title{font-family:'Fredoka One',cursive;font-size:.9rem;margin-bottom:9px}
+.fb.great .fb-title{color:#4ade80}.fb.work .fb-title{color:#f5c842}.fb.tip .fb-title{color:#60a5fa}
+.fb-list{list-style:none;display:flex;flex-direction:column;gap:7px}
+.fb-list li{font-size:.88rem;font-weight:600;line-height:1.45;display:flex;gap:7px}
+.drill-card{background:linear-gradient(135deg,rgba(26,107,42,.4),rgba(45,158,64,.15));border:1px solid rgba(45,158,64,.35);border-radius:13px;padding:17px;margin-bottom:11px}
+.drill-title{font-family:'Fredoka One',cursive;color:#4ade80;font-size:.95rem;margin-bottom:7px}
+.drill-name{font-weight:800;font-size:.92rem;margin-bottom:5px}
+.drill-desc{font-size:.84rem;color:rgba(255,255,255,.7);line-height:1.5}
+.hype-line{text-align:center;padding:14px;font-family:'Fredoka One',cursive;font-size:1.05rem;color:#f5c842}
+.btn-again{width:100%;padding:12px;border-radius:12px;border:1.5px solid rgba(255,255,255,.15);background:transparent;color:#f8f4ee;font-family:'Fredoka One',cursive;font-size:1rem;cursor:pointer;margin-top:6px}
+@media(max-width:480px){.focus-grid{grid-template-columns:1fr}.logo{font-size:2rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="margin-bottom:24px">
+    <div class="logo">⚾ Swing <span>Coach</span></div>
+    <div class="tagline">Record the swing • AI analyzes it • Get better!</div>
+  </div>
+
+  <div id="theForm">
+    <div class="card">
+      <div class="card-title">🏷️ Who's up to bat?</div>
+      <input class="name-input" id="playerName" type="text" placeholder="Enter player's name..." maxlength="30">
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎬 Load the swing video</div>
+
+      <!-- video preview -->
+      <video id="videoEl" playsinline muted></video>
+
+      <!-- filmstrip preview -->
+      <div id="filmstrip">
+        <div class="filmstrip-label">📽️ Frames captured from your swing</div>
+        <div class="frames-row" id="framesRow"></div>
+      </div>
+
+      <!-- processing progress -->
+      <div id="processingBox">
+        <div class="proc-title">⚙️ Extracting swing frames...</div>
+        <div class="prog-bar-wrap"><div class="prog-bar" id="progBar"></div></div>
+        <div class="proc-sub" id="procSub">Starting...</div>
+      </div>
+
+      <!-- file buttons (hidden after file chosen) -->
+      <div id="fileButtons">
+        <div class="file-wrap">
+          <input type="file" id="inputVid" accept="video/*" capture="environment">
+          <div class="file-btn vid">🎬 Record a Swing</div>
+        </div>
+        <div class="file-wrap">
+          <input type="file" id="inputLib" accept="video/*,image/*">
+          <div class="file-btn lib">📁 Choose from Library</div>
+        </div>
+        <div class="hint">💡 Film from the side • 3–5 seconds is plenty</div>
+      </div>
+
+      <button class="retake-btn" id="retakeBtn" style="display:none" onclick="retake()">🔄 Use a different video</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎯 What should Coach look at?</div>
+      <div class="focus-grid" id="focusGrid">
+        <label class="focus-item on"><input type="checkbox" value="Stance and Setup" checked><span style="font-size:1.2rem">🦵</span><span class="fi-label">Stance &amp; Setup</span></label>
+        <label class="focus-item on"><input type="checkbox" value="Grip and Hands" checked><span style="font-size:1.2rem">✊</span><span class="fi-label">Grip &amp; Hands</span></label>
+        <label class="focus-item on"><input type="checkbox" value="Swing Path" checked><span style="font-size:1.2rem">🌀</span><span class="fi-label">Swing Path</span></label>
+        <label class="focus-item on"><input type="checkbox" value="Follow Through" checked><span style="font-size:1.2rem">🌪️</span><span class="fi-label">Follow Through</span></label>
+        <label class="focus-item"><input type="checkbox" value="Hip Rotation"><span style="font-size:1.2rem">🕺</span><span class="fi-label">Hip Rotation</span></label>
+        <label class="focus-item"><input type="checkbox" value="Eye on Ball"><span style="font-size:1.2rem">👁️</span><span class="fi-label">Eye on Ball</span></label>
+      </div>
+    </div>
+
+    <button class="btn-analyze" id="analyzeBtn" disabled onclick="analyze()">⚡ Analyze My Swing!</button>
+    <div class="err" id="errBox"></div>
+  </div>
+
+  <div id="loadingBox">
+    <div class="spin">⚾</div>
+    <div class="load-title">Coach Freddy is watching the swing...</div>
+    <div class="load-sub">Analyzing all frames • This takes 15–20 seconds</div>
+  </div>
+
+  <div id="resultsBox"></div>
+</div>
+
+<script>
+var frames = []; // array of {b64, mime} objects
+var videoReady = false;
+
+// Focus toggles
+document.querySelectorAll('#focusGrid .focus-item').forEach(function(item) {
+  item.addEventListener('click', function() {
+    var cb = item.querySelector('input');
+    cb.checked = !cb.checked;
+    item.classList.toggle('on', cb.checked);
   });
+});
+
+document.getElementById('inputVid').addEventListener('change', function(e) { handleMedia(e.target.files[0]); });
+document.getElementById('inputLib').addEventListener('change', function(e) { handleMedia(e.target.files[0]); });
+
+function handleMedia(file) {
+  if (!file) return;
+  clearErr();
+  frames = [];
+  videoReady = false;
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('filmstrip').style.display = 'none';
+  document.getElementById('framesRow').innerHTML = '';
+
+  if (file.type.startsWith('image/')) {
+    // Single image path
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var dataUrl = ev.target.result;
+      resizeImage(dataUrl, function(resized) {
+        frames = [{ b64: resized.split(',')[1], mime: 'image/jpeg' }];
+        document.getElementById('fileButtons').style.display = 'none';
+        document.getElementById('retakeBtn').style.display = 'block';
+        // Show as single frame
+        var img = document.createElement('img');
+        img.src = resized;
+        img.style.cssText = 'width:100%;border-radius:12px;max-height:260px;object-fit:contain;background:#000;display:block;margin-bottom:10px';
+        var vid = document.getElementById('videoEl');
+        vid.parentNode.insertBefore(img, vid);
+        img.id = 'imgPreview';
+        document.getElementById('analyzeBtn').disabled = false;
+      });
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  if (!file.type.startsWith('video/')) { showErr('Please choose a video or image file.'); return; }
+
+  // Video path — show preview, then play-capture frames
+  var vid = document.getElementById('videoEl');
+  var url = URL.createObjectURL(file);
+  vid.src = url;
+  vid.style.display = 'block';
+  document.getElementById('fileButtons').style.display = 'none';
+  document.getElementById('retakeBtn').style.display = 'block';
+
+  vid.addEventListener('loadedmetadata', function() {
+    startPlayCapture(vid, file);
+  }, { once: true });
+
+  // Fallback if loadedmetadata doesn't fire
+  setTimeout(function() {
+    if (!videoReady) startPlayCapture(vid, file);
+  }, 3000);
+
+  vid.load();
 }
 
-export default function SwingCoach() {
-  const [screen, setScreen]     = useState("form"); // form | loading | results
-  const [playerName, setName]   = useState("");
-  const [focus, setFocus]       = useState(FOCUS_OPTIONS.map(f => ({ ...f })));
-  const [preview, setPreview]   = useState(null);
-  const [b64, setB64]           = useState(null);
-  const [mime, setMime]         = useState("image/jpeg");
-  const [result, setResult]     = useState(null);
-  const [error, setError]       = useState("");
-  const camRef = useRef(); const libRef = useRef();
+function startPlayCapture(vid, file) {
+  if (videoReady) return;
+  videoReady = true;
 
-  function toggleFocus(i) {
-    setFocus(f => f.map((item, idx) => idx === i ? { ...item, on: !item.on } : item));
-  }
+  var duration = vid.duration || 5;
+  var targetFrames = 4; // send 4 frames to the API
+  var captured = [];
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
 
-  function handleFile(file) {
-    if (!file || !file.type.startsWith("image/")) { setError("Please choose an image file."); return; }
-    setError("");
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const original = ev.target.result;
-      setPreview(original);
-      const resized = await resizeImage(original);
-      setB64(resized.split(",")[1]);
-      setMime("image/jpeg");
-    };
-    reader.onerror = () => setError("Could not read the image. Try a different photo.");
-    reader.readAsDataURL(file);
-  }
+  document.getElementById('processingBox').style.display = 'block';
+  updateProgress(0, 'Playing video to capture frames...');
 
-  function retake() {
-    setPreview(null); setB64(null); setError("");
-    if (camRef.current) camRef.current.value = "";
-    if (libRef.current) libRef.current.value = "";
-  }
+  // Play the video and sample frames at regular intervals
+  var interval = Math.max(200, (duration * 1000) / (targetFrames + 1));
+  var frameCount = 0;
+  var timer = null;
 
-  async function analyze() {
-    if (!b64) { setError("Image still loading — wait a moment then try again."); return; }
-    const name = playerName.trim() || "the batter";
-    const focusStr = focus.filter(f => f.on).map(f => f.value).join(", ") || "overall swing";
-
-    setScreen("loading"); setError("");
-
-    const sys = `You are Coach Freddy, a fun encouraging youth baseball coach for a 9-year-old. Be positive, simple, use emojis.
-Reply with ONLY valid JSON, no markdown, no extra text:
-{"score":<1-100>,"scoreLabel":"<label>","greats":["...","..."],"improvements":["...","..."],"proTip":"...","drill":{"name":"...","description":"2-3 sentences"},"hype":"..."}`;
-
+  function captureFrame() {
+    if (vid.videoWidth === 0) return;
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: sys,
-          messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
-            { type: "text",  text: `Analyze ${name}'s baseball swing. Focus: ${focusStr}.` }
-          ]}]
-        })
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error?.message || `HTTP ${res.status}`);
-      const raw   = (json.content || []).map(x => x.text || "").join("").trim();
-      const clean = raw.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim();
-      const parsed = JSON.parse(clean);
-      setResult({ ...parsed, name });
-      setScreen("results");
-    } catch (err) {
-      setScreen("form");
-      setError("❌ " + (err.message || String(err)));
+      var maxW = 800;
+      var scale = Math.min(1, maxW / vid.videoWidth);
+      canvas.width  = Math.round(vid.videoWidth  * scale);
+      canvas.height = Math.round(vid.videoHeight * scale);
+      ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.80);
+      if (dataUrl.length > 5000) {
+        captured.push({ b64: dataUrl.split(',')[1], mime: 'image/jpeg', thumb: dataUrl });
+        frameCount++;
+        updateProgress(frameCount / targetFrames * 100, 'Captured frame ' + frameCount + ' of ' + targetFrames);
+      }
+    } catch(e) { /* codec restriction, keep trying */ }
+
+    if (frameCount >= targetFrames) {
+      clearInterval(timer);
+      vid.pause();
+      finishCapture(captured);
     }
   }
 
-  function reset() {
-    setScreen("form"); setResult(null); setError("");
-    retake(); setName("");
-  }
-
-  // ── STYLES ──
-  const s = {
-    wrap:    { background: "#1a2a4a", minHeight: "100vh", fontFamily: "'Nunito', sans-serif", color: "#f8f4ee", padding: "20px 14px 60px" },
-    logo:    { fontFamily: "'Fredoka One', cursive", fontSize: "2.4rem", color: "#f5c842", textShadow: "0 3px 0 #b8911e", textAlign: "center", lineHeight: 1 },
-    logoSpan:{ color: "#f8f4ee", textShadow: "0 3px 0 #555" },
-    tagline: { textAlign: "center", fontSize: "0.88rem", fontWeight: 600, color: "rgba(255,255,255,0.45)", marginBottom: 24 },
-    card:    { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 18, padding: 20, marginBottom: 16 },
-    cardTitle:{ fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", color: "#f5c842", marginBottom: 12 },
-    input:   { width: "100%", background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "11px 14px", color: "#f8f4ee", fontFamily: "'Nunito', sans-serif", fontSize: "1rem", fontWeight: 600, outline: "none" },
-    previewImg: { width: "100%", borderRadius: 12, maxHeight: 280, objectFit: "contain", background: "#000", display: "block", marginBottom: 10 },
-    retakeBtn:  { width: "100%", padding: 10, borderRadius: 11, border: "1.5px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8f4ee", fontFamily: "'Fredoka One', cursive", fontSize: "0.9rem", cursor: "pointer" },
-    fileWrap: { position: "relative", marginBottom: 10 },
-    fileInput:{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", cursor: "pointer", fontSize: 0 },
-    camBtn:  { width: "100%", padding: 15, borderRadius: 13, border: "none", background: "linear-gradient(135deg,#065f46,#10b981)", color: "#fff", fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, pointerEvents: "none" },
-    libBtn:  { width: "100%", padding: 15, borderRadius: 13, border: "1.5px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.75)", fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, pointerEvents: "none" },
-    hint:    { textAlign: "center", fontSize: "0.76rem", fontWeight: 600, color: "rgba(255,255,255,0.32)", marginTop: 8 },
-    focusGrid:{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 },
-    focusItem:(on) => ({ display: "flex", alignItems: "center", gap: 8, background: on ? "rgba(245,200,66,0.12)" : "rgba(255,255,255,0.05)", border: `1.5px solid ${on ? "#f5c842" : "rgba(255,255,255,0.1)"}`, borderRadius: 11, padding: "9px 12px", cursor: "pointer", userSelect: "none", transition: "all 0.2s" }),
-    fiLabel: { fontSize: "0.85rem", fontWeight: 700 },
-    analyzeBtn:(disabled) => ({ width: "100%", padding: 15, borderRadius: 15, border: "none", background: disabled ? "rgba(200,118,58,0.4)" : "linear-gradient(135deg,#c8763a,#e8955a)", color: "#fff", fontFamily: "'Fredoka One', cursive", fontSize: "1.3rem", cursor: disabled ? "not-allowed" : "pointer", boxShadow: disabled ? "none" : "0 4px 0 #8a4d1e", opacity: disabled ? 0.5 : 1 }),
-    err:     { background: "rgba(232,64,64,0.15)", border: "1px solid rgba(232,64,64,0.3)", borderRadius: 11, padding: "13px 15px", fontSize: "0.86rem", color: "#fca5a5", marginTop: 12, wordBreak: "break-word" },
-    loadWrap:{ textAlign: "center", padding: "60px 20px" },
-    spin:    { fontSize: "3.5rem", display: "inline-block", animation: "spin 1.2s linear infinite" },
-    loadTitle:{ fontFamily: "'Fredoka One', cursive", fontSize: "1.25rem", color: "#f5c842", marginTop: 14 },
-    loadSub: { fontSize: "0.82rem", color: "rgba(255,255,255,0.4)", marginTop: 6 },
-    // results
-    rCenter: { textAlign: "center", marginBottom: 16 },
-    badge:   { display: "inline-flex", alignItems: "center", gap: 5, background: "linear-gradient(135deg,#7c3aed,#4f46e5)", borderRadius: 50, padding: "5px 13px", fontSize: "0.75rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 },
-    rName:   { fontFamily: "'Fredoka One', cursive", fontSize: "1.85rem", color: "#f5c842", textShadow: "0 2px 0 #b8911e" },
-    rSub:    { fontSize: "0.82rem", color: "rgba(255,255,255,0.42)", fontWeight: 600 },
-    scoreWrap:{ display: "flex", justifyContent: "center", margin: "8px 0 22px" },
-    fb:      (color) => ({ background: "rgba(255,255,255,0.04)", border: `1px solid rgba(255,255,255,0.09)`, borderLeft: `4px solid ${color}`, borderRadius: 13, padding: 15, marginBottom: 11 }),
-    fbTitle: (color) => ({ fontFamily: "'Fredoka One', cursive", fontSize: "0.9rem", color, marginBottom: 9 }),
-    fbList:  { listStyle: "none", display: "flex", flexDirection: "column", gap: 7 },
-    fbLi:    { fontSize: "0.88rem", fontWeight: 600, lineHeight: 1.45, display: "flex", gap: 7 },
-    drill:   { background: "linear-gradient(135deg,rgba(26,107,42,0.4),rgba(45,158,64,0.15))", border: "1px solid rgba(45,158,64,0.35)", borderRadius: 13, padding: 17, marginBottom: 11 },
-    drillT:  { fontFamily: "'Fredoka One', cursive", color: "#4ade80", fontSize: "0.95rem", marginBottom: 7 },
-    drillN:  { fontWeight: 800, fontSize: "0.92rem", marginBottom: 5 },
-    drillD:  { fontSize: "0.84rem", color: "rgba(255,255,255,0.7)", lineHeight: 1.5 },
-    hype:    { textAlign: "center", padding: 14, fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", color: "#f5c842" },
-    againBtn:{ width: "100%", padding: 12, borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.15)", background: "transparent", color: "#f8f4ee", fontFamily: "'Fredoka One', cursive", fontSize: "1rem", cursor: "pointer", marginTop: 6 },
-  };
-
-  const ScoreRing = ({ score }) => {
-    const col = score >= 80 ? "#4ade80" : score >= 60 ? "#f5c842" : "#f87171";
-    const deg = Math.round(score / 100 * 360);
-    return (
-      <div style={s.scoreWrap}>
-        <div style={{ width: 118, height: 118, borderRadius: "50%", background: `conic-gradient(${col} ${deg}deg, rgba(255,255,255,0.07) ${deg}deg)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-          <div style={{ position: "absolute", inset: 11, borderRadius: "50%", background: "#1e3a6a" }} />
-          <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
-            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: "2rem", color: col, lineHeight: 1 }}>{score}</div>
-            <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{result?.scoreLabel || "Nice Swing!"}</div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  if (screen === "loading") return (
-    <div style={s.wrap}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap'); @keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={s.loadWrap}>
-        <div style={s.spin}>⚾</div>
-        <div style={s.loadTitle}>Coach Freddy is watching...</div>
-        <div style={s.loadSub}>This takes about 10–15 seconds</div>
-      </div>
-    </div>
-  );
-
-  if (screen === "results" && result) {
-    const score = Math.min(100, Math.max(1, result.score || 70));
-    return (
-      <div style={s.wrap}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');`}</style>
-        <div style={s.rCenter}>
-          <div style={s.badge}>⚡ Swing Report</div>
-          <div style={s.rName}>Great job, {result.name}! 🎉</div>
-          <div style={s.rSub}>Here's what Coach Freddy saw</div>
-        </div>
-        <ScoreRing score={score} />
-        <div style={s.fb("#4ade80")}>
-          <div style={s.fbTitle("#4ade80")}>🌟 Awesome things you did!</div>
-          <ul style={s.fbList}>{(result.greats||[]).map((g,i)=><li key={i} style={s.fbLi}><span>✅</span>{g}</li>)}</ul>
-        </div>
-        <div style={s.fb("#f5c842")}>
-          <div style={s.fbTitle("#f5c842")}>💡 Let's level up these things</div>
-          <ul style={s.fbList}>{(result.improvements||[]).map((g,i)=><li key={i} style={s.fbLi}><span>💪</span>{g}</li>)}</ul>
-        </div>
-        {result.proTip && <div style={s.fb("#60a5fa")}><div style={s.fbTitle("#60a5fa")}>🏆 Pro Tip from Coach Freddy</div><ul style={s.fbList}><li style={s.fbLi}><span>⭐</span>{result.proTip}</li></ul></div>}
-        {result.drill && <div style={s.drill}><div style={s.drillT}>🏋️ Today's Practice Drill</div><div style={s.drillN}>{result.drill.name}</div><div style={s.drillD}>{result.drill.description}</div></div>}
-        {result.hype && <div style={s.hype}>{result.hype} ⚾</div>}
-        <button style={s.againBtn} onClick={reset}>🔄 Analyze Another Swing</button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={s.wrap}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap'); @keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={{ marginBottom: 26 }}>
-        <div style={s.logo}>⚾ Swing <span style={s.logoSpan}>Coach</span></div>
-        <div style={s.tagline}>Take a photo • Get tips • Hit better!</div>
-      </div>
-
-      {/* Name */}
-      <div style={s.card}>
-        <div style={s.cardTitle}>🏷️ Who's up to bat?</div>
-        <input style={s.input} value={playerName} onChange={e => setName(e.target.value)} placeholder="Enter player's name..." maxLength={30} />
-      </div>
-
-      {/* Photo */}
-      <div style={s.card}>
-        <div style={s.cardTitle}>📸 Get a swing photo</div>
-        {preview ? (
-          <>
-            <img src={preview} alt="Swing" style={s.previewImg} />
-            <button style={s.retakeBtn} onClick={retake}>🔄 Use a different photo</button>
-          </>
-        ) : (
-          <>
-            <div style={s.fileWrap}>
-              <input ref={camRef} type="file" accept="image/*" capture="environment" style={s.fileInput} onChange={e => handleFile(e.target.files[0])} />
-              <div style={s.camBtn}>📸 Take a Photo</div>
-            </div>
-            <div style={s.fileWrap}>
-              <input ref={libRef} type="file" accept="image/*" style={s.fileInput} onChange={e => handleFile(e.target.files[0])} />
-              <div style={s.libBtn}>🖼️ Choose from Library</div>
-            </div>
-            <div style={s.hint}>💡 Best from the side, at the moment of contact</div>
-          </>
-        )}
-      </div>
-
-      {/* Focus */}
-      <div style={s.card}>
-        <div style={s.cardTitle}>🎯 What should Coach look at?</div>
-        <div style={s.focusGrid}>
-          {focus.map((f, i) => (
-            <div key={i} style={s.focusItem(f.on)} onClick={() => toggleFocus(i)}>
-              <span style={{ fontSize: "1.15rem" }}>{f.emoji}</span>
-              <span style={s.fiLabel}>{f.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <button style={s.analyzeBtn(!b64)} disabled={!b64} onClick={analyze}>⚡ Analyze My Swing!</button>
-      {error && <div style={s.err}>{error}</div>}
-    </div>
-  );
+  vid.playbackRate = 1;
+  vid.play().then(function() {
+    timer = setInterval(captureFrame, interval);
+    // Safety stop
+    setTimeout(function() {
+      clearInterval(timer);
+      vid.pause();
+      finishCapture(captured);
+    }, (duration * 1000) + 2000);
+  }).catch(function(e) {
+    // Autoplay blocked — try muted play or fall back to image
+    vid.muted = true;
+    vid.play().then(function() {
+      timer = setInterval(captureFrame, interval);
+      setTimeout(function() { clearInterval(timer); vid.pause(); finishCapture(captured); }, (duration * 1000) + 2000);
+    }).catch(function() {
+      document.getElementById('processingBox').style.display = 'none';
+      showErr('Could not auto-play the video to capture frames. Try choosing from Library instead of recording directly.');
+    });
+  });
 }
+
+function finishCapture(captured) {
+  document.getElementById('processingBox').style.display = 'none';
+
+  if (captured.length === 0) {
+    showErr('Could not extract frames from this video. Please try a different video format, or take a photo of the swing instead.');
+    return;
+  }
+
+  frames = captured;
+
+  // Show filmstrip
+  var row = document.getElementById('framesRow');
+  row.innerHTML = '';
+  captured.forEach(function(f) {
+    var img = document.createElement('img');
+    img.src = f.thumb;
+    img.className = 'frame-thumb';
+    row.appendChild(img);
+  });
+  document.getElementById('filmstrip').style.display = 'block';
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+function updateProgress(pct, msg) {
+  document.getElementById('progBar').style.width = Math.round(pct) + '%';
+  document.getElementById('procSub').textContent = msg;
+}
+
+function retake() {
+  frames = []; videoReady = false;
+  document.getElementById('analyzeBtn').disabled = true;
+  var vid = document.getElementById('videoEl');
+  vid.pause(); vid.src = ''; vid.style.display = 'none';
+  document.getElementById('filmstrip').style.display = 'none';
+  document.getElementById('framesRow').innerHTML = '';
+  document.getElementById('processingBox').style.display = 'none';
+  document.getElementById('fileButtons').style.display = 'block';
+  document.getElementById('retakeBtn').style.display = 'none';
+  document.getElementById('inputVid').value = '';
+  document.getElementById('inputLib').value = '';
+  var img = document.getElementById('imgPreview');
+  if (img) img.remove();
+  clearErr();
+}
+
+function resizeImage(dataUrl, cb) {
+  var img = new Image();
+  img.onload = function() {
+    try {
+      var maxW = 1024;
+      var scale = Math.min(1, maxW / img.width);
+      var c = document.createElement('canvas');
+      c.width  = Math.round(img.width  * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      cb(c.toDataURL('image/jpeg', 0.85));
+    } catch(e) { cb(dataUrl); }
+  };
+  img.onerror = function() { cb(dataUrl); };
+  img.src = dataUrl;
+}
+
+// ── ANALYSIS ──
+function analyze() {
+  if (!frames.length) { showErr('No frames captured yet.'); return; }
+  var name = document.getElementById('playerName').value.trim() || 'the batter';
+  var focus = [];
+  document.querySelectorAll('#focusGrid input:checked').forEach(function(c) { focus.push(c.value); });
+  var focusStr = focus.join(', ') || 'overall swing';
+
+  document.getElementById('theForm').style.display = 'none';
+  document.getElementById('loadingBox').style.display = 'block';
+
+  var sys = 'You are Coach Freddy, a fun encouraging youth baseball swing coach analyzing a 9-year-old\'s swing. You will receive multiple frames from the video showing different moments of the swing. Analyze the full sequence. Be positive, encouraging, and use emojis. Use simple words a kid can understand.\n\nReply with ONLY valid JSON, no markdown:\n{"score":<1-100>,"scoreLabel":"<short label>","greats":["<thing>","<thing>"],"improvements":["<thing>","<thing>"],"proTip":"<tip>","drill":{"name":"<name>","description":"<2-3 kid-friendly sentences>"},"hype":"<one hype sentence>"}';
+
+  // Build content array with all frames
+  var content = frames.map(function(f, i) {
+    return { type: 'image', source: { type: 'base64', media_type: f.mime, data: f.b64 } };
+  });
+  content.push({ type: 'text', text: 'These are ' + frames.length + ' frames from ' + name + '\'s baseball swing in sequence. Analyze the full swing motion. Focus on: ' + focusStr + '.' });
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: sys,
+      messages: [{ role: 'user', content: content }]
+    })
+  })
+  .then(function(res) {
+    return res.json().then(function(j) { return { ok: res.ok, status: res.status, json: j }; });
+  })
+  .then(function(r) {
+    if (!r.ok || r.json.error) {
+      throw new Error(r.json.error ? r.json.error.message : 'HTTP ' + r.status + ': ' + JSON.stringify(r.json).slice(0,200));
+    }
+    var raw   = (r.json.content || []).map(function(x) { return x.text || ''; }).join('').trim();
+    var clean = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
+    var parsed;
+    try { parsed = JSON.parse(clean); }
+    catch(e) { throw new Error('Could not parse response: ' + clean.slice(0,200)); }
+    showResults(name, parsed);
+  })
+  .catch(function(err) {
+    document.getElementById('theForm').style.display = 'block';
+    document.getElementById('loadingBox').style.display = 'none';
+    showErr('❌ ' + (err.message || String(err)));
+  });
+}
+
+function showResults(name, r) {
+  document.getElementById('loadingBox').style.display = 'none';
+  var score = Math.min(100, Math.max(1, r.score || 70));
+  var deg   = Math.round(score / 100 * 360);
+  var col   = score >= 80 ? '#4ade80' : score >= 60 ? '#f5c842' : '#f87171';
+  var greats = (r.greats || []).map(function(g) { return '<li><span>✅</span> ' + esc(g) + '</li>'; }).join('');
+  var imps   = (r.improvements || []).map(function(g) { return '<li><span>💪</span> ' + esc(g) + '</li>'; }).join('');
+
+  document.getElementById('resultsBox').innerHTML =
+    '<div style="text-align:center;margin-bottom:16px">' +
+      '<div class="hype-badge">⚡ Swing Report</div><br>' +
+      '<div class="r-name">Great job, ' + esc(name) + '! 🎉</div>' +
+      '<div class="r-sub">Here\'s what Coach Freddy saw</div>' +
+    '</div>' +
+    '<div class="score-wrap"><div class="score-ring" style="background:conic-gradient(' + col + ' ' + deg + 'deg,rgba(255,255,255,.07) ' + deg + 'deg)">' +
+      '<div class="score-inner"><div class="score-num" style="color:' + col + '">' + score + '</div><div class="score-lbl">' + esc(r.scoreLabel || 'Nice Swing!') + '</div></div></div></div>' +
+    '<div class="fb great"><div class="fb-title">🌟 Awesome things you did!</div><ul class="fb-list">' + greats + '</ul></div>' +
+    '<div class="fb work"><div class="fb-title">💡 Let\'s level up these things</div><ul class="fb-list">' + imps + '</ul></div>' +
+    (r.proTip ? '<div class="fb tip"><div class="fb-title">🏆 Pro Tip from Coach Freddy</div><ul class="fb-list"><li><span>⭐</span> ' + esc(r.proTip) + '</li></ul></div>' : '') +
+    (r.drill ? '<div class="drill-card"><div class="drill-title">🏋️ Today\'s Practice Drill</div><div class="drill-name">' + esc(r.drill.name) + '</div><div class="drill-desc">' + esc(r.drill.description) + '</div></div>' : '') +
+    (r.hype ? '<div class="hype-line">' + esc(r.hype) + ' ⚾</div>' : '') +
+    '<button class="btn-again" onclick="resetAll()">🔄 Analyze Another Swing</button>';
+
+  document.getElementById('resultsBox').style.display = 'block';
+}
+
+function resetAll() {
+  document.getElementById('resultsBox').style.display = 'none';
+  document.getElementById('resultsBox').innerHTML = '';
+  document.getElementById('theForm').style.display = 'block';
+  retake();
+}
+
+function showErr(msg) { var e = document.getElementById('errBox'); e.textContent = msg; e.style.display = 'block'; }
+function clearErr()   { var e = document.getElementById('errBox'); e.style.display = 'none'; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>
