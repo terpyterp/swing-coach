@@ -1,1 +1,263 @@
+import { useState, useRef } from "react";
 
+const FOCUS_OPTIONS = [
+  { value: "Stance and Setup", emoji: "🦵", label: "Stance & Setup", on: true },
+  { value: "Grip and Hands",   emoji: "✊", label: "Grip & Hands",   on: true },
+  { value: "Swing Path",       emoji: "🌀", label: "Swing Path",     on: true },
+  { value: "Follow Through",   emoji: "🌪️", label: "Follow Through", on: true },
+  { value: "Hip Rotation",     emoji: "🕺", label: "Hip Rotation",   on: false },
+  { value: "Eye on Ball",      emoji: "👁️", label: "Eye on Ball",    on: false },
+];
+
+function resizeImage(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const maxW = 1024;
+        const scale = Math.min(1, maxW / img.width);
+        const c = document.createElement("canvas");
+        c.width  = Math.round(img.width  * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL("image/jpeg", 0.85));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+export default function SwingCoach() {
+  const [screen, setScreen]     = useState("form"); // form | loading | results
+  const [playerName, setName]   = useState("");
+  const [focus, setFocus]       = useState(FOCUS_OPTIONS.map(f => ({ ...f })));
+  const [preview, setPreview]   = useState(null);
+  const [b64, setB64]           = useState(null);
+  const [mime, setMime]         = useState("image/jpeg");
+  const [result, setResult]     = useState(null);
+  const [error, setError]       = useState("");
+  const camRef = useRef(); const libRef = useRef();
+
+  function toggleFocus(i) {
+    setFocus(f => f.map((item, idx) => idx === i ? { ...item, on: !item.on } : item));
+  }
+
+  function handleFile(file) {
+    if (!file || !file.type.startsWith("image/")) { setError("Please choose an image file."); return; }
+    setError("");
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const original = ev.target.result;
+      setPreview(original);
+      const resized = await resizeImage(original);
+      setB64(resized.split(",")[1]);
+      setMime("image/jpeg");
+    };
+    reader.onerror = () => setError("Could not read the image. Try a different photo.");
+    reader.readAsDataURL(file);
+  }
+
+  function retake() {
+    setPreview(null); setB64(null); setError("");
+    if (camRef.current) camRef.current.value = "";
+    if (libRef.current) libRef.current.value = "";
+  }
+
+  async function analyze() {
+    if (!b64) { setError("Image still loading — wait a moment then try again."); return; }
+    const name = playerName.trim() || "the batter";
+    const focusStr = focus.filter(f => f.on).map(f => f.value).join(", ") || "overall swing";
+
+    setScreen("loading"); setError("");
+
+    const sys = `You are Coach Freddy, a fun encouraging youth baseball coach for a 9-year-old. Be positive, simple, use emojis.
+Reply with ONLY valid JSON, no markdown, no extra text:
+{"score":<1-100>,"scoreLabel":"<label>","greats":["...","..."],"improvements":["...","..."],"proTip":"...","drill":{"name":"...","description":"2-3 sentences"},"hype":"..."}`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: sys,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
+            { type: "text",  text: `Analyze ${name}'s baseball swing. Focus: ${focusStr}.` }
+          ]}]
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error?.message || `HTTP ${res.status}`);
+      const raw   = (json.content || []).map(x => x.text || "").join("").trim();
+      const clean = raw.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim();
+      const parsed = JSON.parse(clean);
+      setResult({ ...parsed, name });
+      setScreen("results");
+    } catch (err) {
+      setScreen("form");
+      setError("❌ " + (err.message || String(err)));
+    }
+  }
+
+  function reset() {
+    setScreen("form"); setResult(null); setError("");
+    retake(); setName("");
+  }
+
+  // ── STYLES ──
+  const s = {
+    wrap:    { background: "#1a2a4a", minHeight: "100vh", fontFamily: "'Nunito', sans-serif", color: "#f8f4ee", padding: "20px 14px 60px" },
+    logo:    { fontFamily: "'Fredoka One', cursive", fontSize: "2.4rem", color: "#f5c842", textShadow: "0 3px 0 #b8911e", textAlign: "center", lineHeight: 1 },
+    logoSpan:{ color: "#f8f4ee", textShadow: "0 3px 0 #555" },
+    tagline: { textAlign: "center", fontSize: "0.88rem", fontWeight: 600, color: "rgba(255,255,255,0.45)", marginBottom: 24 },
+    card:    { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 18, padding: 20, marginBottom: 16 },
+    cardTitle:{ fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", color: "#f5c842", marginBottom: 12 },
+    input:   { width: "100%", background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "11px 14px", color: "#f8f4ee", fontFamily: "'Nunito', sans-serif", fontSize: "1rem", fontWeight: 600, outline: "none" },
+    previewImg: { width: "100%", borderRadius: 12, maxHeight: 280, objectFit: "contain", background: "#000", display: "block", marginBottom: 10 },
+    retakeBtn:  { width: "100%", padding: 10, borderRadius: 11, border: "1.5px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8f4ee", fontFamily: "'Fredoka One', cursive", fontSize: "0.9rem", cursor: "pointer" },
+    fileWrap: { position: "relative", marginBottom: 10 },
+    fileInput:{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", cursor: "pointer", fontSize: 0 },
+    camBtn:  { width: "100%", padding: 15, borderRadius: 13, border: "none", background: "linear-gradient(135deg,#065f46,#10b981)", color: "#fff", fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, pointerEvents: "none" },
+    libBtn:  { width: "100%", padding: 15, borderRadius: 13, border: "1.5px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.75)", fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, pointerEvents: "none" },
+    hint:    { textAlign: "center", fontSize: "0.76rem", fontWeight: 600, color: "rgba(255,255,255,0.32)", marginTop: 8 },
+    focusGrid:{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 },
+    focusItem:(on) => ({ display: "flex", alignItems: "center", gap: 8, background: on ? "rgba(245,200,66,0.12)" : "rgba(255,255,255,0.05)", border: `1.5px solid ${on ? "#f5c842" : "rgba(255,255,255,0.1)"}`, borderRadius: 11, padding: "9px 12px", cursor: "pointer", userSelect: "none", transition: "all 0.2s" }),
+    fiLabel: { fontSize: "0.85rem", fontWeight: 700 },
+    analyzeBtn:(disabled) => ({ width: "100%", padding: 15, borderRadius: 15, border: "none", background: disabled ? "rgba(200,118,58,0.4)" : "linear-gradient(135deg,#c8763a,#e8955a)", color: "#fff", fontFamily: "'Fredoka One', cursive", fontSize: "1.3rem", cursor: disabled ? "not-allowed" : "pointer", boxShadow: disabled ? "none" : "0 4px 0 #8a4d1e", opacity: disabled ? 0.5 : 1 }),
+    err:     { background: "rgba(232,64,64,0.15)", border: "1px solid rgba(232,64,64,0.3)", borderRadius: 11, padding: "13px 15px", fontSize: "0.86rem", color: "#fca5a5", marginTop: 12, wordBreak: "break-word" },
+    loadWrap:{ textAlign: "center", padding: "60px 20px" },
+    spin:    { fontSize: "3.5rem", display: "inline-block", animation: "spin 1.2s linear infinite" },
+    loadTitle:{ fontFamily: "'Fredoka One', cursive", fontSize: "1.25rem", color: "#f5c842", marginTop: 14 },
+    loadSub: { fontSize: "0.82rem", color: "rgba(255,255,255,0.4)", marginTop: 6 },
+    // results
+    rCenter: { textAlign: "center", marginBottom: 16 },
+    badge:   { display: "inline-flex", alignItems: "center", gap: 5, background: "linear-gradient(135deg,#7c3aed,#4f46e5)", borderRadius: 50, padding: "5px 13px", fontSize: "0.75rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 },
+    rName:   { fontFamily: "'Fredoka One', cursive", fontSize: "1.85rem", color: "#f5c842", textShadow: "0 2px 0 #b8911e" },
+    rSub:    { fontSize: "0.82rem", color: "rgba(255,255,255,0.42)", fontWeight: 600 },
+    scoreWrap:{ display: "flex", justifyContent: "center", margin: "8px 0 22px" },
+    fb:      (color) => ({ background: "rgba(255,255,255,0.04)", border: `1px solid rgba(255,255,255,0.09)`, borderLeft: `4px solid ${color}`, borderRadius: 13, padding: 15, marginBottom: 11 }),
+    fbTitle: (color) => ({ fontFamily: "'Fredoka One', cursive", fontSize: "0.9rem", color, marginBottom: 9 }),
+    fbList:  { listStyle: "none", display: "flex", flexDirection: "column", gap: 7 },
+    fbLi:    { fontSize: "0.88rem", fontWeight: 600, lineHeight: 1.45, display: "flex", gap: 7 },
+    drill:   { background: "linear-gradient(135deg,rgba(26,107,42,0.4),rgba(45,158,64,0.15))", border: "1px solid rgba(45,158,64,0.35)", borderRadius: 13, padding: 17, marginBottom: 11 },
+    drillT:  { fontFamily: "'Fredoka One', cursive", color: "#4ade80", fontSize: "0.95rem", marginBottom: 7 },
+    drillN:  { fontWeight: 800, fontSize: "0.92rem", marginBottom: 5 },
+    drillD:  { fontSize: "0.84rem", color: "rgba(255,255,255,0.7)", lineHeight: 1.5 },
+    hype:    { textAlign: "center", padding: 14, fontFamily: "'Fredoka One', cursive", fontSize: "1.05rem", color: "#f5c842" },
+    againBtn:{ width: "100%", padding: 12, borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.15)", background: "transparent", color: "#f8f4ee", fontFamily: "'Fredoka One', cursive", fontSize: "1rem", cursor: "pointer", marginTop: 6 },
+  };
+
+  const ScoreRing = ({ score }) => {
+    const col = score >= 80 ? "#4ade80" : score >= 60 ? "#f5c842" : "#f87171";
+    const deg = Math.round(score / 100 * 360);
+    return (
+      <div style={s.scoreWrap}>
+        <div style={{ width: 118, height: 118, borderRadius: "50%", background: `conic-gradient(${col} ${deg}deg, rgba(255,255,255,0.07) ${deg}deg)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+          <div style={{ position: "absolute", inset: 11, borderRadius: "50%", background: "#1e3a6a" }} />
+          <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
+            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: "2rem", color: col, lineHeight: 1 }}>{score}</div>
+            <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{result?.scoreLabel || "Nice Swing!"}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (screen === "loading") return (
+    <div style={s.wrap}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap'); @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={s.loadWrap}>
+        <div style={s.spin}>⚾</div>
+        <div style={s.loadTitle}>Coach Freddy is watching...</div>
+        <div style={s.loadSub}>This takes about 10–15 seconds</div>
+      </div>
+    </div>
+  );
+
+  if (screen === "results" && result) {
+    const score = Math.min(100, Math.max(1, result.score || 70));
+    return (
+      <div style={s.wrap}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');`}</style>
+        <div style={s.rCenter}>
+          <div style={s.badge}>⚡ Swing Report</div>
+          <div style={s.rName}>Great job, {result.name}! 🎉</div>
+          <div style={s.rSub}>Here's what Coach Freddy saw</div>
+        </div>
+        <ScoreRing score={score} />
+        <div style={s.fb("#4ade80")}>
+          <div style={s.fbTitle("#4ade80")}>🌟 Awesome things you did!</div>
+          <ul style={s.fbList}>{(result.greats||[]).map((g,i)=><li key={i} style={s.fbLi}><span>✅</span>{g}</li>)}</ul>
+        </div>
+        <div style={s.fb("#f5c842")}>
+          <div style={s.fbTitle("#f5c842")}>💡 Let's level up these things</div>
+          <ul style={s.fbList}>{(result.improvements||[]).map((g,i)=><li key={i} style={s.fbLi}><span>💪</span>{g}</li>)}</ul>
+        </div>
+        {result.proTip && <div style={s.fb("#60a5fa")}><div style={s.fbTitle("#60a5fa")}>🏆 Pro Tip from Coach Freddy</div><ul style={s.fbList}><li style={s.fbLi}><span>⭐</span>{result.proTip}</li></ul></div>}
+        {result.drill && <div style={s.drill}><div style={s.drillT}>🏋️ Today's Practice Drill</div><div style={s.drillN}>{result.drill.name}</div><div style={s.drillD}>{result.drill.description}</div></div>}
+        {result.hype && <div style={s.hype}>{result.hype} ⚾</div>}
+        <button style={s.againBtn} onClick={reset}>🔄 Analyze Another Swing</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={s.wrap}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap'); @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ marginBottom: 26 }}>
+        <div style={s.logo}>⚾ Swing <span style={s.logoSpan}>Coach</span></div>
+        <div style={s.tagline}>Take a photo • Get tips • Hit better!</div>
+      </div>
+
+      {/* Name */}
+      <div style={s.card}>
+        <div style={s.cardTitle}>🏷️ Who's up to bat?</div>
+        <input style={s.input} value={playerName} onChange={e => setName(e.target.value)} placeholder="Enter player's name..." maxLength={30} />
+      </div>
+
+      {/* Photo */}
+      <div style={s.card}>
+        <div style={s.cardTitle}>📸 Get a swing photo</div>
+        {preview ? (
+          <>
+            <img src={preview} alt="Swing" style={s.previewImg} />
+            <button style={s.retakeBtn} onClick={retake}>🔄 Use a different photo</button>
+          </>
+        ) : (
+          <>
+            <div style={s.fileWrap}>
+              <input ref={camRef} type="file" accept="image/*" capture="environment" style={s.fileInput} onChange={e => handleFile(e.target.files[0])} />
+              <div style={s.camBtn}>📸 Take a Photo</div>
+            </div>
+            <div style={s.fileWrap}>
+              <input ref={libRef} type="file" accept="image/*" style={s.fileInput} onChange={e => handleFile(e.target.files[0])} />
+              <div style={s.libBtn}>🖼️ Choose from Library</div>
+            </div>
+            <div style={s.hint}>💡 Best from the side, at the moment of contact</div>
+          </>
+        )}
+      </div>
+
+      {/* Focus */}
+      <div style={s.card}>
+        <div style={s.cardTitle}>🎯 What should Coach look at?</div>
+        <div style={s.focusGrid}>
+          {focus.map((f, i) => (
+            <div key={i} style={s.focusItem(f.on)} onClick={() => toggleFocus(i)}>
+              <span style={{ fontSize: "1.15rem" }}>{f.emoji}</span>
+              <span style={s.fiLabel}>{f.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button style={s.analyzeBtn(!b64)} disabled={!b64} onClick={analyze}>⚡ Analyze My Swing!</button>
+      {error && <div style={s.err}>{error}</div>}
+    </div>
+  );
+}
